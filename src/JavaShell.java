@@ -13,6 +13,12 @@ public class JavaShell {
 
 	private static final String LOAD_CMD_NAME = "load";
 
+	private static final String BIND_CMD_NAME = "bind";
+
+	private static final String UNBIND_CMD_NAME = "unbind";
+
+	private static final String SHOW_BIND_CMD_NAME = "showbind";
+
 	public static void main(String[] args) {
 		System.out.println("Welcome to Java Shell");
 		System.out.println("Use \"load [classname]\" to load a class");
@@ -24,27 +30,24 @@ public class JavaShell {
 	private Class operationClass;
 	private Object operatingInstance;
 	private Map<String, Object> bindings = new HashMap<>();
-	private Object rtObj;
 
 	/**
 	 * Enter the interactive shell
 	 */
 	private void interactive() {
 		Scanner s = new Scanner(System.in);
-		while (true) {
-			// prints the shell prompt
-			System.out.print(shellPrompt);
+		// prints the shell prompt
+		System.out.print(shellPrompt);
 
-			// read and execute next lines
-			while (s.hasNextLine()) {
-				String cmd = s.nextLine();
-				try {
-					interpreteCommand(cmd);
-				} catch (Exception e) {
-					e.printStackTrace();
-				}
-				System.out.print(shellPrompt);
+		// read and execute next lines
+		while (s.hasNextLine()) {
+			String cmd = s.nextLine();
+			try {
+				interpreteCommand(cmd);
+			} catch (Exception e) {
+				e.printStackTrace();
 			}
+			System.out.print(shellPrompt);
 		}
 
 	}
@@ -79,8 +82,45 @@ public class JavaShell {
 				} catch (NoOperatingClassException e) {
 					printDefaultPrompt();
 				}
-			} else if (actionAvailable(actionName)) {
+			} else if (actionName.equals(BIND_CMD_NAME)) {
+				if(operatingInstance == null)
+				{
+					System.out.println("Before binding, please load a class");
+					printUsage(LOAD_CMD_NAME);
+				}
 
+
+				try {
+					String varName = tokenizer.nextToken();
+					assert operatingInstance.getClass().equals(
+							operationClass) : "Operating class and instance not equal";
+					bindings.put(varName, operatingInstance);
+				} catch (NoSuchElementException e) {
+					printUsage(BIND_CMD_NAME);
+				}
+			} else if (actionName.equals(UNBIND_CMD_NAME)) {
+				try {
+					String varName = tokenizer.nextToken();
+					if (!bindings.containsKey(varName)) {
+						System.out.println(
+								"Bindings not present for name " + varName);
+					} else {
+						Object obj = bindings.get(varName);
+						this.operatingInstance = obj;
+						this.operationClass = obj.getClass();
+					}
+				} catch (NoSuchElementException e) {
+					printUsage(UNBIND_CMD_NAME);
+				}
+
+			} else if (actionName.equals(SHOW_BIND_CMD_NAME)){
+				
+				for(String key : bindings.keySet()){
+					System.out.println(key + " : " + bindings.get(key).toString());
+				}
+			} else
+
+			if (actionAvailable(actionName)) {
 				executeAction(actionName, tokenizer);
 			}
 
@@ -104,56 +144,56 @@ public class JavaShell {
 	 * @param tokenizer
 	 */
 	private void executeAction(String actionName, StringTokenizer tokenizer) {
-			Method[] methods = operationClass.getMethods();
+		Method[] methods = operationClass.getMethods();
 
-			// gets the string arguments
-			ArrayList<String> arguments = argumentListFromTokenizer(tokenizer);
-			Exception excp = null;
-			boolean success = false;
+		// gets the string arguments
+		ArrayList<String> arguments = argumentListFromTokenizer(tokenizer);
+		Exception excp = null;
+		boolean success = false;
 
-			// iterate through methods
-			for (Method mtd : methods) {
+		// iterate through methods
+		for (Method mtd : methods) {
+			if (!mtd.getName().equals(actionName))
+				continue;
 
-				Object[] arguemntObjs;
+			Object[] arguemntObjs;
+			try {
+				arguemntObjs = argumentObjectsForExecutableWithStringParameters(
+						mtd, arguments);
+				// now we've got arguemnts ready, construct the object
 				try {
-					arguemntObjs = argumentObjectsForExecutableWithStringParameters(
-							mtd, arguments);
-					// now we've got arguemnts ready, construct the object
-						try {
-							Object obj = mtd.invoke(operatingInstance, arguemntObjs);
-							System.out.println("The return value is " + obj);
-							rtObj = obj;
-							success = true;
-							break;
-						} catch (IllegalAccessException
-								| IllegalArgumentException
-								| InvocationTargetException e) {
-							excp = e;
-						}
-				} catch (UnableToConstructException e1) {
-					excp = e1;
+					Object objRT = mtd.invoke(operatingInstance, arguemntObjs);
+					System.out.println("The return value is " + objRT);
+					bindings.put("rtObj", objRT);
+					success = true;
+					break;
+				} catch (IllegalAccessException | IllegalArgumentException
+						| InvocationTargetException e) {
+					excp = e;
 				}
-
-			} // end for mtd in Methods
-
-			if (success) {
-				System.out.println(
-						" Method executed Successfully, ignore any invokation errors, should there be any");
-
-			} else {
-				// for loop completed
-				// no method executes successfully
-				System.out.println(
-						"Cannot find a suitable method for given type "
-								+ operationClass.getName());
-				System.out.println("Type \"ls\" to see a list of suitable methods");
-				
-				if (excp != null) {
-					System.out.println(
-							"Should there be any exceptions during construction, below are the messages.");
-					System.out.println(excp.getMessage());
-				}
+			} catch (UnableToConstructException e1) {
+				excp = e1;
 			}
+
+		} // end for mtd in Methods
+
+		if (success) {
+			System.out.println(
+					" Method executed Successfully, ignore any invokation errors, should there be any");
+
+		} else {
+			// for loop completed
+			// no method executes successfully
+			System.out.println("Cannot find a suitable method for given type "
+					+ operationClass.getName());
+			System.out.println("Type \"ls\" to see a list of suitable methods");
+
+			if (excp != null) {
+				System.out.println(
+						"Should there be any exceptions during invokation, below are the messages.");
+				System.out.println(excp.toString());
+			}
+		}
 	}
 
 	/**
@@ -165,6 +205,8 @@ public class JavaShell {
 	 * @return
 	 */
 	private boolean actionAvailable(String actionName) {
+		if (operationClass == null)
+			return false;
 		for (Method m : operationClass.getMethods()) {
 			if (m.getName().equals(actionName)) {
 				return true;
@@ -240,6 +282,27 @@ public class JavaShell {
 		if (paramsTypes.length != arguments.size())
 			throw new UnableToConstructException(
 					"Type parameters count does not match");
+		// get rid of primitives
+		for (int i = 0; i < paramsTypes.length; i++) {
+			if (paramsTypes[i].isPrimitive()) {
+				if (paramsTypes[i].getName().equals("int"))
+					paramsTypes[i] = Integer.class;
+				if (paramsTypes[i].getName().equals("char"))
+					paramsTypes[i] = Character.class;
+				if (paramsTypes[i].getName().equals("boolean"))
+					paramsTypes[i] = Boolean.class;
+				if (paramsTypes[i].getName().equals("byte"))
+					paramsTypes[i] = Byte.class;
+				if (paramsTypes[i].getName().equals("short"))
+					paramsTypes[i] = Short.class;
+				if (paramsTypes[i].getName().equals("long"))
+					paramsTypes[i] = Long.class;
+				if (paramsTypes[i].getName().equals("float"))
+					paramsTypes[i] = Float.class;
+				if (paramsTypes[i].getName().equals("double"))
+					paramsTypes[i] = Double.class;
+			}
+		}
 
 		// trys to construct arguments
 		Object[] argumentObjs = new Object[paramsTypes.length];
@@ -250,10 +313,12 @@ public class JavaShell {
 			// first lookup the table
 			if (bindings.containsKey(argumentStr)) {
 				argumentObj = bindings.get(argumentStr);
+				argumentObjs[i] = argumentObj;
 			} else {
 				// then construct from single parameter-typed String
 				try {
 					// gets the single string constructor
+					@SuppressWarnings({ "unchecked", "rawtypes" })
 					Constructor c = paramsTypes[i]
 							.getConstructor(argumentStr.getClass());
 					try {
@@ -316,6 +381,7 @@ public class JavaShell {
 			// gets the string arguments
 			ArrayList<String> arguments = argumentListFromTokenizer(tokenizer);
 			Exception excp = null;
+			boolean success = false;;
 
 			// iterate through constructors
 			for (Constructor con : cons) {
@@ -330,6 +396,7 @@ public class JavaShell {
 						this.operationClass = operationClass;
 						this.operatingInstance = obj;
 						// break the constructor for loop
+						success = true;
 						break;
 					} catch (InstantiationException | IllegalAccessException
 							| IllegalArgumentException
@@ -342,7 +409,7 @@ public class JavaShell {
 
 			} // end for con in constructors
 
-			if (this.operationClass != null && this.operatingInstance != null) {
+			if (success) {
 				System.out.println(
 						"Instance Constructed Successfully, ignore any instantiation errors, should there be any");
 
@@ -360,7 +427,7 @@ public class JavaShell {
 				if (excp != null) {
 					System.out.println(
 							"Should there be any exceptions during construction, below are the messages.");
-					System.out.println(excp.getMessage());
+					System.out.println(excp.toString());
 				}
 			}
 
@@ -389,6 +456,10 @@ public class JavaShell {
 	private String usage(String cmdName) {
 		if (cmdName == LOAD_CMD_NAME) {
 			return "load [classname]";
+		} else if (cmdName == BIND_CMD_NAME){
+			return "bind [varname], -- Binds currently operation variable to a name";
+		} else if (cmdName == UNBIND_CMD_NAME){
+			return "unbind [varname] -- replaces currently operating variable with the one specified";
 		}
 		return null;
 	}
