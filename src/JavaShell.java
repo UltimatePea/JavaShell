@@ -25,7 +25,6 @@ public class JavaShell {
 		new JavaShell().interactive();
 	}
 
-	private String shellPrompt = ">>> ";
 
 	private Class operationClass;
 	private Object operatingInstance;
@@ -37,7 +36,7 @@ public class JavaShell {
 	private void interactive() {
 		Scanner s = new Scanner(System.in);
 		// prints the shell prompt
-		System.out.print(shellPrompt);
+		System.out.print(getShellPrompt());
 
 		// read and execute next lines
 		while (s.hasNextLine()) {
@@ -47,9 +46,18 @@ public class JavaShell {
 			} catch (Exception e) {
 				e.printStackTrace();
 			}
-			System.out.print(shellPrompt);
+			System.out.print(getShellPrompt());
 		}
 
+	}
+
+	private String getShellPrompt() {
+		if(operationClass == null){
+			return ">>> ";
+		} else {
+			return operationClass.getName() + " >>> ";
+			
+		}
 	}
 
 	/**
@@ -162,6 +170,8 @@ public class JavaShell {
 						mtd, arguments);
 				// now we've got arguemnts ready, construct the object
 				try {
+					if(!mtd.isAccessible())
+						mtd.setAccessible(true);
 					Object objRT = mtd.invoke(operatingInstance, arguemntObjs);
 					System.out.println("The return value is " + objRT);
 					bindings.put("rtObj", objRT);
