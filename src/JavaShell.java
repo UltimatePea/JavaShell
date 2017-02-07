@@ -24,6 +24,7 @@ public class JavaShell {
 	private Class operationClass;
 	private Object operatingInstance;
 	private Map<String, Object> bindings = new HashMap<>();
+	private Object rtObj;
 
 	/**
 	 * Enter the interactive shell
@@ -31,7 +32,10 @@ public class JavaShell {
 	private void interactive() {
 		Scanner s = new Scanner(System.in);
 		while (true) {
+			// prints the shell prompt
 			System.out.print(shellPrompt);
+
+			// read and execute next lines
 			while (s.hasNextLine()) {
 				String cmd = s.nextLine();
 				try {
@@ -75,6 +79,9 @@ public class JavaShell {
 				} catch (NoOperatingClassException e) {
 					printDefaultPrompt();
 				}
+			} else if (actionAvailable(actionName)) {
+
+				executeAction(actionName, tokenizer);
 			}
 
 			else {
@@ -88,6 +95,82 @@ public class JavaShell {
 			System.out.println("Please specify the command name");
 		}
 
+	}
+
+	/**
+	 * Executes a specific action
+	 * 
+	 * @param actionName
+	 * @param tokenizer
+	 */
+	private void executeAction(String actionName, StringTokenizer tokenizer) {
+			Method[] methods = operationClass.getMethods();
+
+			// gets the string arguments
+			ArrayList<String> arguments = argumentListFromTokenizer(tokenizer);
+			Exception excp = null;
+			boolean success = false;
+
+			// iterate through methods
+			for (Method mtd : methods) {
+
+				Object[] arguemntObjs;
+				try {
+					arguemntObjs = argumentObjectsForExecutableWithStringParameters(
+							mtd, arguments);
+					// now we've got arguemnts ready, construct the object
+						try {
+							Object obj = mtd.invoke(operatingInstance, arguemntObjs);
+							System.out.println("The return value is " + obj);
+							rtObj = obj;
+							success = true;
+							break;
+						} catch (IllegalAccessException
+								| IllegalArgumentException
+								| InvocationTargetException e) {
+							excp = e;
+						}
+				} catch (UnableToConstructException e1) {
+					excp = e1;
+				}
+
+			} // end for mtd in Methods
+
+			if (success) {
+				System.out.println(
+						" Method executed Successfully, ignore any invokation errors, should there be any");
+
+			} else {
+				// for loop completed
+				// no method executes successfully
+				System.out.println(
+						"Cannot find a suitable method for given type "
+								+ operationClass.getName());
+				System.out.println("Type \"ls\" to see a list of suitable methods");
+				
+				if (excp != null) {
+					System.out.println(
+							"Should there be any exceptions during construction, below are the messages.");
+					System.out.println(excp.getMessage());
+				}
+			}
+	}
+
+	/**
+	 * Checks if an action is available from the current operating class This
+	 * method checks name only, it does not check arguments
+	 * 
+	 * @param actionName
+	 *            the name of the action
+	 * @return
+	 */
+	private boolean actionAvailable(String actionName) {
+		for (Method m : operationClass.getMethods()) {
+			if (m.getName().equals(actionName)) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -138,6 +221,85 @@ public class JavaShell {
 	}
 
 	/**
+	 * Trys to construct an argument list from string command line input
+	 * 
+	 * @param exec
+	 *            Constructor or Method
+	 * @param arguments
+	 *            the tokenized string arguments
+	 * @return the constructed object
+	 * @throws UnableToConstructException
+	 *             if any error occurs
+	 */
+	private Object[] argumentObjectsForExecutableWithStringParameters(
+			Executable exec, ArrayList<String> arguments)
+			throws UnableToConstructException {
+		Class[] paramsTypes = exec.getParameterTypes();
+
+		// only select the constructor with the same number of arguments
+		if (paramsTypes.length != arguments.size())
+			throw new UnableToConstructException(
+					"Type parameters count does not match");
+
+		// trys to construct arguments
+		Object[] argumentObjs = new Object[paramsTypes.length];
+		for (int i = 0; i < paramsTypes.length; i++) {
+			String argumentStr = arguments.get(i);
+			Object argumentObj;
+
+			// first lookup the table
+			if (bindings.containsKey(argumentStr)) {
+				argumentObj = bindings.get(argumentStr);
+			} else {
+				// then construct from single parameter-typed String
+				try {
+					// gets the single string constructor
+					Constructor c = paramsTypes[i]
+							.getConstructor(argumentStr.getClass());
+					try {
+						argumentObj = c.newInstance(argumentStr);
+						argumentObjs[i] = argumentObj;
+					} catch (InstantiationException | IllegalAccessException
+							| IllegalArgumentException
+							| InvocationTargetException e) {
+						throw new UnableToConstructException(
+								e.getClass().getName() + " :: "
+										+ e.getMessage());
+					}
+
+					/* Single Sring constructor does not exist */
+				} catch (NoSuchMethodException e) {
+					throw new UnableToConstructException(
+							"Cannot Find a Constructor with Single String Argument for argument "
+									+ i);
+				} catch (SecurityException e) {
+					throw new UnableToConstructException(e.getMessage());
+				} // end try getConstructor
+			} // end if bindings
+
+		} // end for i in params
+
+		// no exception thrown sofar, return constructed list
+		return argumentObjs;
+
+	}
+
+	/**
+	 * Get a list of argument from a tokenizer
+	 * 
+	 * @param tokenizer
+	 * @return
+	 */
+	private ArrayList<String> argumentListFromTokenizer(
+			StringTokenizer tokenizer) {
+		// gets the string arguments
+		ArrayList<String> arguments = new ArrayList<>();
+		while (tokenizer.hasMoreTokens())
+			arguments.add(tokenizer.nextToken());
+		return arguments;
+	}
+
+	/**
 	 * Loads a class
 	 * 
 	 * @param className
@@ -152,94 +314,55 @@ public class JavaShell {
 			Constructor[] cons = operationClass.getConstructors();
 
 			// gets the string arguments
-			ArrayList<String> arguments = new ArrayList<>();
-			while (tokenizer.hasMoreTokens())
-				arguments.add(tokenizer.nextToken());
+			ArrayList<String> arguments = argumentListFromTokenizer(tokenizer);
+			Exception excp = null;
 
 			// iterate through constructors
 			for (Constructor con : cons) {
-				Class[] params = con.getParameterTypes();
 
-
-				//only select the constructor with the same number of arguments
-				if (params.length != arguments.size()) continue;
-
-					// trys to construct arguments
-					Object[] argumentObjs = new Object[params.length];
-					for (int i = 0; i < params.length; i++) {
-						String argumentStr = arguments.get(i);
-						Object argumentObj;
-
-						// first lookup the table
-						if (bindings.containsKey(argumentStr)) {
-							argumentObj = bindings.get(argumentStr);
-						} else {
-							try {
-								Constructor c = params[i]
-										.getConstructor(argumentStr.getClass());
-								try {
-									argumentObj = c.newInstance(argumentStr);
-									argumentObjs[i] = argumentObj;
-
-								} catch (InstantiationException e) {
-									e.printStackTrace();
-									continue;
-								} catch (IllegalAccessException e) {
-									e.printStackTrace();
-									continue;
-								} catch (IllegalArgumentException e) {
-									e.printStackTrace();
-									continue;
-								} catch (InvocationTargetException e) {
-									e.printStackTrace();
-									continue;
-								} // end try newInstance
-							} catch (NoSuchMethodException e) {
-								System.out.println(
-										"Cannot Find a Constructor with Single String Argument for argument "
-												+ i);
-								continue;
-							} catch (SecurityException e) {
-								e.printStackTrace();
-								continue;
-							} // end try getConstructor
-						} // end if bindings
-
-					} // end for i in params
-
+				Object[] arguemntObjs;
+				try {
+					arguemntObjs = argumentObjectsForExecutableWithStringParameters(
+							con, arguments);
 					// now we've got arguemnts ready, construct the object
 					try {
-						Object obj = con.newInstance(argumentObjs);
+						Object obj = con.newInstance(arguemntObjs);
 						this.operationClass = operationClass;
 						this.operatingInstance = obj;
-						System.out.println("Instance Constructed Successfully, ignore any instantiation errors, should there be any");
-						//break the constructor for loop
+						// break the constructor for loop
 						break;
-					} catch (InstantiationException e) {
-						e.printStackTrace();
-						continue;
-					} catch (IllegalAccessException e) {
-						e.printStackTrace();
-						continue;
-					} catch (IllegalArgumentException e) {
-						e.printStackTrace();
-						continue;
-					} catch (InvocationTargetException e) {
-						e.printStackTrace();
-						continue;
+					} catch (InstantiationException | IllegalAccessException
+							| IllegalArgumentException
+							| InvocationTargetException e) {
+						excp = e;
 					}
-					
+				} catch (UnableToConstructException e1) {
+					excp = e1;
+				}
 
-				}// end for con in constructors
-			
-			//for loop completed
-			//no constructor found
-			System.out.println("Cannot find a suitable contructor for given type");
-			for(Constructor con : cons){
-				System.out.println(methodSignatureToString(con));
+			} // end for con in constructors
+
+			if (this.operationClass != null && this.operatingInstance != null) {
+				System.out.println(
+						"Instance Constructed Successfully, ignore any instantiation errors, should there be any");
+
+			} else {
+				// for loop completed
+				// no constructor found
+				System.out.println(
+						"Cannot find a suitable contructor for given type "
+								+ operationClass.getName());
+				System.out.println("Below are a list of suitable contructors");
+				for (Constructor con : cons) {
+					System.out.println(methodSignatureToString(con));
+
+				}
+				if (excp != null) {
+					System.out.println(
+							"Should there be any exceptions during construction, below are the messages.");
+					System.out.println(excp.getMessage());
+				}
 			}
-
-			
 
 		} catch (ClassNotFoundException e) {
 			System.out.printf("Class %s not found.\n", className);
