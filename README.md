@@ -44,8 +44,8 @@ java JavaShell <filename>
 
 ##Tutorial
 
-Please visit [Hello World Guide](https://github.com/UltimatePea/JavaShell/wiki/Hello,-World!!-JavaShell----Introduction) for an introduction.
-Please visit our [wiki page](https://github.com/UltimatePea/JavaShell/wiki) for a complete guide.
+-Please visit [Hello World Guide](https://github.com/UltimatePea/JavaShell/wiki/Hello,-World!!-JavaShell----Introduction) for an introduction.
+-Please visit our [wiki page](https://github.com/UltimatePea/JavaShell/wiki) for a complete guide.
 
 
 
