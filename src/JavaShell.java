@@ -1,3 +1,7 @@
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.InputStream;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Executable;
 import java.lang.reflect.InvocationTargetException;
@@ -9,6 +13,8 @@ import java.util.NoSuchElementException;
 import java.util.Scanner;
 import java.util.StringTokenizer;
 
+import org.xml.sax.InputSource;
+
 public class JavaShell {
 
 	private static final String LOAD_CMD_NAME = "load";
@@ -19,12 +25,30 @@ public class JavaShell {
 
 	private static final String SHOW_BIND_CMD_NAME = "showbind";
 
-	public static void main(String[] args) {
-		System.out.println("Welcome to Java Shell");
-		System.out.println("Use \"load [classname]\" to load a class");
-		new JavaShell().interactive();
-	}
+	private static boolean verbose = true;
 
+	public static void main(String[] args) {
+		if (args.length > 1) {
+			stdoutputln("Usage: java JavaShell [scriptname, optional]");
+			System.exit(1);
+		}
+		InputStream input = System.in;
+		if (args.length == 1) {
+			File f = new File(args[0]);
+			try {
+				input = new FileInputStream(f);
+				verbose = false;
+			} catch (FileNotFoundException e) {
+				stdoutputln("File " + args[0] + " does not exist.");
+				System.exit(1);
+			}
+
+		}
+
+		stdoutputln("Welcome to Java Shell");
+		stdoutputln("Use \"load [classname]\" to load a class");
+		new JavaShell().interactive(input);
+	}
 
 	private Class operationClass;
 	private Object operatingInstance;
@@ -33,10 +57,10 @@ public class JavaShell {
 	/**
 	 * Enter the interactive shell
 	 */
-	private void interactive() {
-		Scanner s = new Scanner(System.in);
+	private void interactive(InputStream in) {
+		Scanner s = new Scanner(in);
 		// prints the shell prompt
-		System.out.print(getShellPrompt());
+		stdoutput(getShellPrompt());
 
 		// read and execute next lines
 		while (s.hasNextLine()) {
@@ -46,17 +70,17 @@ public class JavaShell {
 			} catch (Exception e) {
 				e.printStackTrace();
 			}
-			System.out.print(getShellPrompt());
+			stdoutput(getShellPrompt());
 		}
 
 	}
 
 	private String getShellPrompt() {
-		if(operationClass == null){
+		if (operationClass == null) {
 			return ">>> ";
 		} else {
 			return operationClass.getName() + " >>> ";
-			
+
 		}
 	}
 
@@ -91,12 +115,10 @@ public class JavaShell {
 					printDefaultPrompt();
 				}
 			} else if (actionName.equals(BIND_CMD_NAME)) {
-				if(operatingInstance == null)
-				{
-					System.out.println("Before binding, please load a class");
+				if (operatingInstance == null) {
+					stdoutputln("Before binding, please load a class");
 					printUsage(LOAD_CMD_NAME);
 				}
-
 
 				try {
 					String varName = tokenizer.nextToken();
@@ -110,8 +132,7 @@ public class JavaShell {
 				try {
 					String varName = tokenizer.nextToken();
 					if (!bindings.containsKey(varName)) {
-						System.out.println(
-								"Bindings not present for name " + varName);
+						stdoutputln("Bindings not present for name " + varName);
 					} else {
 						Object obj = bindings.get(varName);
 						this.operatingInstance = obj;
@@ -121,10 +142,10 @@ public class JavaShell {
 					printUsage(UNBIND_CMD_NAME);
 				}
 
-			} else if (actionName.equals(SHOW_BIND_CMD_NAME)){
-				
-				for(String key : bindings.keySet()){
-					System.out.println(key + " : " + bindings.get(key).toString());
+			} else if (actionName.equals(SHOW_BIND_CMD_NAME)) {
+
+				for (String key : bindings.keySet()) {
+					stdoutputln(key + " : " + bindings.get(key).toString());
 				}
 			} else
 
@@ -133,14 +154,14 @@ public class JavaShell {
 			}
 
 			else {
-				System.out.print("Unrecognized Command. ");
+				stdoutput("Unrecognized Command. ");
 				printDefaultPrompt();
 
 			}
 
 			// catch the exception fo reading the first token
 		} catch (NoSuchElementException e) {
-			System.out.println("Please specify the command name");
+			stdoutputln("Please specify the command name");
 		}
 
 	}
@@ -170,10 +191,10 @@ public class JavaShell {
 						mtd, arguments);
 				// now we've got arguemnts ready, construct the object
 				try {
-					if(!mtd.isAccessible())
+					if (!mtd.isAccessible())
 						mtd.setAccessible(true);
 					Object objRT = mtd.invoke(operatingInstance, arguemntObjs);
-					System.out.println("The return value is " + objRT);
+					stdoutputln("The return value is " + objRT);
 					bindings.put("rtObj", objRT);
 					success = true;
 					break;
@@ -188,20 +209,20 @@ public class JavaShell {
 		} // end for mtd in Methods
 
 		if (success) {
-			System.out.println(
+			stdoutputln(
 					" Method executed Successfully, ignore any invokation errors, should there be any");
 
 		} else {
 			// for loop completed
 			// no method executes successfully
-			System.out.println("Cannot find a suitable method for given type "
+			stdoutputln("Cannot find a suitable method for given type "
 					+ operationClass.getName());
-			System.out.println("Type \"ls\" to see a list of suitable methods");
+			stdoutputln("Type \"ls\" to see a list of suitable methods");
 
 			if (excp != null) {
-				System.out.println(
+				stdoutputln(
 						"Should there be any exceptions during invokation, below are the messages.");
-				System.out.println(excp.toString());
+				stdoutputln(excp.toString());
 			}
 		}
 	}
@@ -230,7 +251,7 @@ public class JavaShell {
 	 */
 	private void printDefaultPrompt() {
 		if (operationClass == null) {
-			System.out.println("Use \"" + LOAD_CMD_NAME + "\" to load a class");
+			stdoutputln("Use \"" + LOAD_CMD_NAME + "\" to load a class");
 		} else {
 			System.out
 					.println("Type \"ls\" to see list of operations available");
@@ -250,7 +271,7 @@ public class JavaShell {
 		Method[] methods = operationClass.getMethods();
 
 		for (Method method : methods) {
-			System.out.println(methodSignatureToString(method));
+			stdoutputln(methodSignatureToString(method));
 		}
 
 	}
@@ -391,7 +412,8 @@ public class JavaShell {
 			// gets the string arguments
 			ArrayList<String> arguments = argumentListFromTokenizer(tokenizer);
 			Exception excp = null;
-			boolean success = false;;
+			boolean success = false;
+			;
 
 			// iterate through constructors
 			for (Constructor con : cons) {
@@ -420,29 +442,28 @@ public class JavaShell {
 			} // end for con in constructors
 
 			if (success) {
-				System.out.println(
+				stdoutputln(
 						"Instance Constructed Successfully, ignore any instantiation errors, should there be any");
 
 			} else {
 				// for loop completed
 				// no constructor found
-				System.out.println(
-						"Cannot find a suitable contructor for given type "
-								+ operationClass.getName());
-				System.out.println("Below are a list of suitable contructors");
+				stdoutputln("Cannot find a suitable contructor for given type "
+						+ operationClass.getName());
+				stdoutputln("Below are a list of suitable contructors");
 				for (Constructor con : cons) {
-					System.out.println(methodSignatureToString(con));
+					stdoutputln(methodSignatureToString(con));
 
 				}
 				if (excp != null) {
-					System.out.println(
+					stdoutputln(
 							"Should there be any exceptions during construction, below are the messages.");
-					System.out.println(excp.toString());
+					stdoutputln(excp.toString());
 				}
 			}
 
 		} catch (ClassNotFoundException e) {
-			System.out.printf("Class %s not found.\n", className);
+			stdoutputln("Class" + className + " not found.");
 			printUsage(LOAD_CMD_NAME);
 		}
 	}
@@ -454,7 +475,7 @@ public class JavaShell {
 	 *            command name
 	 */
 	private void printUsage(String commandName) {
-		System.out.println("Usage : " + usage(commandName));
+		stdoutputln("Usage : " + usage(commandName));
 	}
 
 	/**
@@ -466,12 +487,22 @@ public class JavaShell {
 	private String usage(String cmdName) {
 		if (cmdName == LOAD_CMD_NAME) {
 			return "load [classname]";
-		} else if (cmdName == BIND_CMD_NAME){
+		} else if (cmdName == BIND_CMD_NAME) {
 			return "bind [varname], -- Binds currently operation variable to a name";
-		} else if (cmdName == UNBIND_CMD_NAME){
+		} else if (cmdName == UNBIND_CMD_NAME) {
 			return "unbind [varname] -- replaces currently operating variable with the one specified";
 		}
 		return null;
 	}
 
+	private static void stdoutputln(String string) {
+		if (verbose)
+			System.out.println(string);
+
+	}
+
+	private void stdoutput(String string) {
+		if (verbose)
+			System.out.print(string);
+	}
 }
